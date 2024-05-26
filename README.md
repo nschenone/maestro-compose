@@ -21,7 +21,7 @@ Maestro offers several commands to interact with your Docker Compose application
 ### Additional Options
 
 #### Up
-```bash
+```
 maestro up [OPTIONS]
 
 Options:
@@ -31,7 +31,7 @@ Options:
 ```
 
 #### Down
-```bash
+```
 maestro up [OPTIONS]
 
 Options:
@@ -41,7 +41,7 @@ Options:
 ```
 
 #### List
-```bash
+```
 maestro up [OPTIONS]
 
 Options:
@@ -75,13 +75,13 @@ Maestro requires a YAML configuration file to define its behavior. Below is an e
 
 ```yaml
 hosts_include:
-  - $current
+- $current
 hosts_exclude:
 - vm
 tags_include:
   - server
 tags_exclude:
-  - compute_intensive
+- compute_intensive
 ```
 - `hosts_include`: List of hosts to include. Applications matching any of these hosts will be managed by Maestro. Use `$all` to match all hosts or `$current` to match the current host.
 - `hosts_exclude`: List of hosts to exclude. Applications matching any of these hosts will not be managed by Maestro.
