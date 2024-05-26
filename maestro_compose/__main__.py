@@ -26,14 +26,15 @@ def load_config(app_dir: Path) -> MaestroConfig:
             config_path = app_dir / compose_file
             compose_yaml = yaml.safe_load(config_path.read_text())
             maestro_labels = get_maestro_labels(compose_yaml=compose_yaml)
-            try:
-                return MaestroConfig(**maestro_labels)
-            except ValidationError as e:
-                print(f"Validation error in {app_dir}/{compose_file}: {e}")
-                return None
+            if maestro_labels:
+                try:
+                    return MaestroConfig(**maestro_labels)
+                except ValidationError as e:
+                    print(f"Validation error in {app_dir}/{compose_file}: {e}")
+                    return None
         except FileNotFoundError:
             pass
-    print(f"No docker-compose file found in {app_dir}")
+    print(f"No docker-compose file with maestro tags found in {app_dir}")
     return None
 
 

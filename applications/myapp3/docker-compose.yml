@@ -1,0 +1,5 @@
+services:
+  nginx:
+    restart: unless-stopped
+    image: nginx
+    container_name: myapp3
