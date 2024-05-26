@@ -1,12 +1,29 @@
 import json
+import logging
 import subprocess
+import sys
 from pathlib import Path
 
 import click
 import yaml
+from loguru import logger
 from pydantic import ValidationError
 
 from .models import MaestroConfig, MaestroTarget
+
+# logger_format = (
+#     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+#     "<level>{level: <8}</level> | "
+#     "<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+#     "{extra[ip]} {extra[user]} - <level>{message}</level>"
+# )
+logger_format = (
+    # "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+    "<level>{message}</level>"
+)
+logger.configure(extra={"ip": "", "user": ""})  # Default values
+logger.remove()
+logger.add(sys.stderr, format=logger_format)
 
 TARGET_NAME = "maestro.yaml"
 TARGET_DIR = "."
@@ -30,11 +47,11 @@ def load_config(app_dir: Path) -> MaestroConfig:
                 try:
                     return MaestroConfig(**maestro_labels)
                 except ValidationError as e:
-                    print(f"Validation error in {app_dir}/{compose_file}: {e}")
+                    logger.error(f"Validation error in {app_dir}/{compose_file}: {e}")
                     return None
         except FileNotFoundError:
             pass
-    print(f"No docker-compose file with maestro tags found in {app_dir}")
+    logger.info(f"No docker-compose file with maestro tags found in {app_dir}")
     return None
 
 
@@ -121,10 +138,9 @@ def up(applications_dir, target_file, dry_run):
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
     for app_dir, _ in apps:
-        print(f"Starting {app_dir.name}".upper())
+        logger.info(f"Starting {app_dir.name}".upper())
         if not dry_run:
             execute_make(app_dir, "up")
-        print()
 
 
 @cli.command()
@@ -147,10 +163,9 @@ def down(applications_dir, target_file, dry_run):
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
     for app_dir, _ in reversed(apps):
-        print(f"Stopping {app_dir.name}".upper())
+        logger.info(f"Stopping {app_dir.name}".upper())
         if not dry_run:
             execute_make(app_dir, "down")
-        print()
 
 
 @cli.command()
@@ -176,15 +191,17 @@ def list(applications_dir, target_file, services):
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
     for app_dir, app_config in apps:
-        print(f"{app_dir.name}: - {app_config}")
+        logger.info(f"{app_dir.name}: - {app_config}")
 
         if services:
             docker_command = ["docker", "compose", "ps", "--format", "json"]
             result = subprocess.run(
                 docker_command, cwd=app_dir, capture_output=True, text=True, check=True
             )
-
-            containers = json.loads(result.stdout)
+            if result.stdout.startswith("["):
+                containers = json.loads(result.stdout)
+            else:
+                containers = [json.loads(s) for s in result.stdout.splitlines()]
 
             formatted_output = "\n".join(
                 [
@@ -193,11 +210,9 @@ def list(applications_dir, target_file, services):
                 ]
             )
             if formatted_output:
-                print(formatted_output)
+                logger.info(formatted_output)
             else:
-                print("\tNOT RUNNING")
-
-        print()
+                logger.info("\tNOT RUNNING")
 
 
 if __name__ == "__main__":
