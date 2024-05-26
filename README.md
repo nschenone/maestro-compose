@@ -32,7 +32,7 @@ Options:
 
 #### Down
 ```
-maestro up [OPTIONS]
+Usage: maestro down [OPTIONS]
 
 Options:
   --applications-dir TEXT  Specify the path containing docker compose applications.
@@ -42,12 +42,12 @@ Options:
 
 #### List
 ```
-maestro up [OPTIONS]
+Usage: maestro list [OPTIONS]
 
 Options:
   --applications-dir TEXT  Specify the path containing docker compose applications.
   --target-file TEXT       Specify the target YAML file to use for configuration.
-  --dry-run                Simulate the command without making any changes.
+  --services               List the services running in each application.
 ```
 
 ## Configuration
