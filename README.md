@@ -22,7 +22,7 @@ Maestro offers several commands to interact with your Docker Compose application
 
 #### Up
 ```
-maestro up [OPTIONS]
+Usage: maestro up [OPTIONS]
 
 Options:
   --applications-dir TEXT  Specify the path containing docker compose applications.
