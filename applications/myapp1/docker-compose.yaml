@@ -1,10 +1,30 @@
 services:
-  nginx:
+  my-app-1:
     restart: unless-stopped
-    image: nginx
-    container_name: myapp
+    image: busybox
+    container_name: my-app-1
     labels:
       - "maestro.enable=true"
-      - "maestro.tags=nfs_mount,server"
+      - "maestro.tags=compute_intensive,test"
       - "maestro.priority=800"
+      - "maestro.hosts=server,vm"
+
+  my-app-2:
+    restart: unless-stopped
+    image: busybox
+    container_name: my-app-2
+    labels:
+      - "maestro.enable=true"
+      - "maestro.tags=test,gpu"
+      - "maestro.priority=500"
+      - "maestro.hosts=server,vm"
+
+  my-app-3:
+    restart: unless-stopped
+    image: busybox
+    container_name: my-app-3
+    labels:
+      - "maestro.enable=true"
+      - "maestro.tags=test,cicd"
+      - "maestro.priority=10"
       - "maestro.hosts=server,vm"

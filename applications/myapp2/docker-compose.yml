@@ -1,8 +1,8 @@
 services:
-  nginx:
+  busybox:
     restart: unless-stopped
-    image: nginx
-    container_name: myapp2
+    image: busybox
+    container_name: busy
     labels:
       - "maestro.enable=true"
       - "maestro.tags=nfs_mount,server"
