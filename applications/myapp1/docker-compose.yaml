@@ -1,0 +1,10 @@
+services:
+  nginx:
+    restart: unless-stopped
+    image: nginx
+    container_name: myapp
+    labels:
+      - "maestro.enable=true"
+      - "maestro.tags=nfs_mount,server"
+      - "maestro.priority=800"
+      - "maestro.hosts=server,vm"

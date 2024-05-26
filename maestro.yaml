@@ -1,0 +1,11 @@
+hosts_include:
+  # - $current
+  - $all
+hosts_exclude: []
+tags_include: []
+# - server
+# - temp
+# - client
+# - compute_intensive
+tags_exclude: []
+#   - client

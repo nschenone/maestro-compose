@@ -1,54 +1,17 @@
 import json
-import socket
 import subprocess
 from pathlib import Path
 
 import click
 import yaml
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import ValidationError
 
-CONFIG_NAME = "maestro-config.yaml"
-TARGET_NAME = "maestro-target.yaml"
+from .models import MaestroConfig, MaestroTarget
+
+TARGET_NAME = "maestro.yaml"
 TARGET_DIR = "."
 APPLICATIONS_DIR = "applications"
-
-
-class MaestroConfig(BaseModel):
-    enabled: bool
-    priority: int = 100
-    hosts: list[str] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def check_hosts(self):
-        if not self.hosts:
-            self.hosts = [socket.gethostname()]
-        return self
-
-
-class MaestroTarget(BaseModel):
-    hosts_include: list
-    hosts_exclude: list[str] = Field(default_factory=list)
-    tags_include: list[str] = Field(default_factory=list)
-    tags_exclude: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def check_hosts(self):
-        for i, host in enumerate(self.hosts_include):
-            self.hosts_include[i] = self.replace_template(template=host)
-        for i, host in enumerate(self.hosts_exclude):
-            self.hosts_exclude[i] = self.replace_template(template=host)
-        return self
-
-    def replace_template(self, template: str) -> str:
-        if template.startswith("$"):
-            if template == "$current":
-                return socket.gethostname()
-            elif template == "$all":
-                return "$all"
-            else:
-                raise ValueError(f"Template {template} not supported.")
-        return template
+DOCKER_COMPOSE_FILES = ["docker-compose.yaml", "docker-compose.yml"]
 
 
 def load_target(root_dir: Path, target_name: str = TARGET_NAME) -> MaestroTarget:
@@ -57,25 +20,32 @@ def load_target(root_dir: Path, target_name: str = TARGET_NAME) -> MaestroTarget
     return MaestroTarget(**params_yaml)
 
 
-def load_config(app_dir: Path, config_name: str = CONFIG_NAME) -> MaestroConfig:
-    config_path = app_dir / config_name
-    config_yaml = yaml.safe_load(config_path.read_text())
-    try:
-        return MaestroConfig(**config_yaml)
-    except ValidationError as e:
-        print(f"Validation error in {app_dir}/{config_name}: {e}")
-        return None
+def load_config(app_dir: Path) -> MaestroConfig:
+    for compose_file in DOCKER_COMPOSE_FILES:
+        try:
+            config_path = app_dir / compose_file
+            compose_yaml = yaml.safe_load(config_path.read_text())
+            maestro_labels = get_maestro_labels(compose_yaml=compose_yaml)
+            try:
+                return MaestroConfig(**maestro_labels)
+            except ValidationError as e:
+                print(f"Validation error in {app_dir}/{compose_file}: {e}")
+                return None
+        except FileNotFoundError:
+            pass
+    print(f"No docker-compose file found in {app_dir}")
+    return None
 
 
 def get_applications(base_dir: Path, target: MaestroTarget):
     apps = []
     for app_dir in base_dir.iterdir():
-        if app_dir.is_dir() and (app_dir / CONFIG_NAME).exists():
+        if app_dir.is_dir():
             config = load_config(app_dir)
             # print(config)
 
             # Maestro config exists and enabled
-            if config and config.enabled:
+            if config and config.enable:
                 # Check host match
 
                 if (
@@ -99,6 +69,28 @@ def get_applications(base_dir: Path, target: MaestroTarget):
     return apps
 
 
+def get_maestro_labels(compose_yaml: dict, maestro_key: str = "maestro."):
+    maestro_labels = {}
+    for data in compose_yaml["services"].values():
+        if "labels" in data.keys():
+            for label in data["labels"]:
+                if isinstance(label, dict):
+                    if any(maestro_key in k for k in label.keys()):
+                        maestro_labels.update(label)
+                elif isinstance(label, str):
+                    k, v = label.split("=")
+                    if maestro_key in k:
+                        maestro_labels[k] = v
+                else:
+                    raise ValueError(f"Label {label} in unsupported format")
+    maestro_labels = {k.replace(maestro_key, ""): v for k, v in maestro_labels.items()}
+    if "tags" in maestro_labels:
+        maestro_labels["tags"] = maestro_labels["tags"].split(",")
+    if "hosts" in maestro_labels:
+        maestro_labels["hosts"] = maestro_labels["hosts"].split(",")
+    return maestro_labels
+
+
 def execute_make(app_dir: Path, command: str):
     subprocess.run(["make", command], cwd=app_dir)
 
@@ -110,6 +102,11 @@ def cli():
 
 @cli.command()
 @click.option(
+    "--applications-dir",
+    default=APPLICATIONS_DIR,
+    help="Specify the path containing docker compose applications.",
+)
+@click.option(
     "--target-file",
     default=TARGET_NAME,
     help="Specify the target YAML file to use for configuration.",
@@ -117,9 +114,9 @@ def cli():
 @click.option(
     "--dry-run", is_flag=True, help="Simulate the command without making any changes."
 )
-def up(target_file, dry_run):
+def up(applications_dir, target_file, dry_run):
     apps = get_applications(
-        base_dir=Path(APPLICATIONS_DIR),
+        base_dir=Path(applications_dir),
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
     for app_dir, _ in apps:
@@ -131,6 +128,11 @@ def up(target_file, dry_run):
 
 @cli.command()
 @click.option(
+    "--applications-dir",
+    default=APPLICATIONS_DIR,
+    help="Specify the path containing docker compose applications.",
+)
+@click.option(
     "--target-file",
     default=TARGET_NAME,
     help="Specify the target YAML file to use for configuration.",
@@ -138,9 +140,9 @@ def up(target_file, dry_run):
 @click.option(
     "--dry-run", is_flag=True, help="Simulate the command without making any changes."
 )
-def down(target_file, dry_run):
+def down(applications_dir, target_file, dry_run):
     apps = get_applications(
-        base_dir=Path(APPLICATIONS_DIR),
+        base_dir=Path(applications_dir),
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
     for app_dir, _ in reversed(apps):
@@ -152,6 +154,11 @@ def down(target_file, dry_run):
 
 @cli.command()
 @click.option(
+    "--applications-dir",
+    default=APPLICATIONS_DIR,
+    help="Specify the path containing docker compose applications.",
+)
+@click.option(
     "--target-file",
     default=TARGET_NAME,
     help="Specify the target YAML file to use for configuration.",
@@ -162,9 +169,9 @@ def down(target_file, dry_run):
     default=False,
     help="List the services running in each application.",
 )
-def list(target_file, services):
+def list(applications_dir, target_file, services):
     apps = get_applications(
-        base_dir=Path(APPLICATIONS_DIR),
+        base_dir=Path(applications_dir),
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
     for app_dir, app_config in apps:
