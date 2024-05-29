@@ -3,6 +3,7 @@ services:
     restart: unless-stopped
     image: busybox
     container_name: my-app-1
+    command: sleep infinity
     labels:
       - "maestro.enable=true"
       - "maestro.tags=compute_intensive,test"
@@ -13,6 +14,7 @@ services:
     restart: unless-stopped
     image: busybox
     container_name: my-app-2
+    command: sleep infinity
     labels:
       - "maestro.enable=true"
       - "maestro.tags=test,gpu"
@@ -23,6 +25,7 @@ services:
     restart: unless-stopped
     image: busybox
     container_name: my-app-3
+    command: sleep infinity
     labels:
       - "maestro.enable=true"
       - "maestro.tags=test,cicd"

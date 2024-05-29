@@ -3,6 +3,7 @@ services:
     restart: unless-stopped
     image: busybox
     container_name: busy
+    command: sleep infinity
     labels:
       - "maestro.enable=true"
       - "maestro.tags=nfs_mount,server"
