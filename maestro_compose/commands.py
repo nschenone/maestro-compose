@@ -5,21 +5,14 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
+from colorama import Fore, Style
 from loguru import logger
 from pydantic import ValidationError
+from tabulate import tabulate
 
 from .models import MaestroConfig, MaestroTarget
 
-# logger_format = (
-#     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-#     "<level>{level: <8}</level> | "
-#     "<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-#     "{extra[ip]} {extra[user]} - <level>{message}</level>"
-# )
-logger_format = (
-    # "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-    "<level>{message}</level>"
-)
+logger_format = "<level>{message}</level>"
 logger.configure(extra={"ip": "", "user": ""})  # Default values
 logger.remove()
 logger.add(sys.stderr, format=logger_format)
@@ -28,6 +21,31 @@ TARGET_NAME = "maestro.yaml"
 TARGET_DIR = "."
 APPLICATIONS_DIR = "applications"
 DOCKER_COMPOSE_FILES = ["docker-compose.yaml", "docker-compose.yml"]
+SHOW_STATUS_COLUMNS = [
+    "enable",
+    "priority",
+    "status",
+    "application",
+    "container",
+    "tags",
+    "hosts",
+]
+NO_STATUS_COLUMNS = ["enable", "priority", "application", "tags", "hosts"]
+
+STATUS_COLOR_MAP = {
+    "created": Fore.BLUE,
+    "started": Fore.CYAN,
+    "restarting": Fore.RED,
+    "exited": Fore.RED,
+    "running": Fore.GREEN,
+    "not running": Fore.LIGHTBLACK_EX,
+}
+
+ENABLED_COLOR_MAP = {True: Fore.GREEN, False: Fore.RED}
+
+
+def format_color(state: str, color_map: dict):
+    return color_map[state] + str(state) + Style.RESET_ALL
 
 
 def load_target(root_dir: Path, target_name: str = TARGET_NAME) -> MaestroTarget:
@@ -46,7 +64,7 @@ def load_config(app_dir: Path) -> MaestroConfig:
                 try:
                     return MaestroConfig(
                         **maestro_labels,
-                        application_name=app_dir.name,
+                        application=app_dir.name,
                         application_dir=str(app_dir),
                     )
                 except ValidationError as e:
@@ -58,7 +76,7 @@ def load_config(app_dir: Path) -> MaestroConfig:
     return None
 
 
-def get_applications(base_dir: Path, target: MaestroTarget):
+def get_applications(base_dir: Path, target: MaestroTarget, show_all: bool = False):
     apps = []
     for app_dir in base_dir.iterdir():
         if app_dir.is_dir():
@@ -66,23 +84,49 @@ def get_applications(base_dir: Path, target: MaestroTarget):
             if config:
                 apps.append(config.dict())
     apps_df = pd.DataFrame(apps)
-    apps_df = filter_dataframe(
-        df=apps_df,
-        column_name="hosts",
-        include=target.hosts_include,
-        exclude=target.hosts_exclude,
-    )
-    apps_df = filter_dataframe(
-        df=apps_df,
-        column_name="tags",
-        include=target.tags_include,
-        exclude=target.tags_exclude,
-    )
+    if not show_all:
+        apps_df = filter_dataframe(
+            df=apps_df,
+            column_name="hosts",
+            include=target.hosts_include,
+            exclude=target.hosts_exclude,
+        )
+        apps_df = filter_dataframe(
+            df=apps_df,
+            column_name="tags",
+            include=target.tags_include,
+            exclude=target.tags_exclude,
+        )
     if not apps_df.empty:
         apps_df = apps_df.sort_values(
-            ["priority", "application_name"], ascending=[True, True]
+            ["priority", "application"], ascending=[True, True]
         )
     return apps_df
+
+
+def get_containers_status():
+    docker_command = ["docker", "ps", "--format", "json"]
+    result = subprocess.run(docker_command, capture_output=True, text=True, check=True)
+    containers = [json.loads(r) for r in result.stdout.splitlines()]
+    all_labels = []
+    for container in containers:
+        formatted_labels = {}
+        labels = container["Labels"].split(",")
+        for l in labels:
+            if "=" in l:
+                try:
+                    k, v = l.split("=")
+                    formatted_labels[k] = v
+                except:
+                    pass
+        all_labels.append(
+            {
+                "application": formatted_labels["com.docker.compose.project"],
+                "container": container["Names"],
+                "status": format_color(container["State"], STATUS_COLOR_MAP),
+            }
+        )
+    return pd.DataFrame(all_labels)
 
 
 def filter_dataframe(df, column_name, include, exclude):
@@ -139,7 +183,7 @@ def up_command(applications_dir: str, target_file: str, dry_run: bool):
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
     for _, row in apps_df.iterrows():
-        logger.info(f"Starting {row.application_name}".upper())
+        logger.info(Fore.BLUE + f"Starting {row.application}".upper() + Style.RESET_ALL)
         if not dry_run:
             execute_make(row.application_dir, "up")
 
@@ -151,40 +195,51 @@ def down_command(applications_dir: str, target_file: str, dry_run: bool):
     )
     apps_df = apps_df[::-1]
     for _, row in apps_df.iterrows():
-        logger.info(f"Stopping {row.application_name}".upper())
+        logger.info(Fore.BLUE + f"Stopping {row.application}".upper() + Style.RESET_ALL)
         if not dry_run:
             execute_make(row.application_dir, "down")
 
 
-def list_command(applications_dir: str, target_file: str, services: bool):
+def list_command(
+    applications_dir: str,
+    target_file: str,
+    show_status: bool,
+    show_target: bool,
+    show_all: bool,
+):
+    columns = SHOW_STATUS_COLUMNS if show_status else NO_STATUS_COLUMNS
+    target = load_target(root_dir=Path(TARGET_DIR), target_name=target_file)
     apps_df = get_applications(
-        base_dir=Path(applications_dir),
-        target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
+        base_dir=Path(applications_dir), target=target, show_all=show_all
     )
-    for _, row in apps_df.iterrows():
-        logger.info(f"{row.application_name}: - {row.to_dict()}")
+    merged = apps_df.copy()
+    if show_status:
+        join_how = "outer" if show_all else "left"
+        status_df = get_containers_status()
+        merged = status_df.merge(merged, on="application", how=join_how)
+        merged[["container"]] = merged[["container"]].fillna(value="")
+        merged[["status"]] = merged[["status"]].fillna(
+            value=format_color("not running", STATUS_COLOR_MAP)
+        )
+        merged = merged.dropna()
+        if merged.empty:
+            merged = apps_df
+            if show_status:
+                merged["status"] = format_color("not running", STATUS_COLOR_MAP)
+                merged["container"] = ""
 
-        if services:
-            docker_command = ["docker", "compose", "ps", "--format", "json"]
-            result = subprocess.run(
-                docker_command,
-                cwd=row.application_dir,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            if result.stdout.startswith("["):
-                containers = json.loads(result.stdout)
-            else:
-                containers = [json.loads(s) for s in result.stdout.splitlines()]
+    if not show_all:
+        merged = merged[merged["enable"]]
+    merged["enable"] = merged.enable.apply(
+        lambda x: format_color(state=x, color_map=ENABLED_COLOR_MAP)
+    )
+    merged = merged[columns]
+    merged = merged.sort_values(["priority", "application"], ascending=[True, True])
+    formatted = merged.to_dict(orient="records")
 
-            formatted_output = "\n".join(
-                [
-                    f"\t{container['Name']}: {container['State']}"
-                    for container in containers
-                ]
-            )
-            if formatted_output:
-                logger.info(formatted_output)
-            else:
-                logger.info("\tNOT RUNNING")
+    if show_target:
+        print(Fore.BLUE + "TARGETS" + Style.RESET_ALL)
+        print(tabulate(target.dict(), headers="keys"))
+        print()
+    print(Fore.BLUE + "SERVICES" + Style.RESET_ALL)
+    print(tabulate(formatted, headers="keys"))
