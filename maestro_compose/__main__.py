@@ -1,7 +1,12 @@
-
 import click
 
-from .commands import up_command, down_command, list_command, TARGET_NAME, APPLICATIONS_DIR
+from .commands import (
+    APPLICATIONS_DIR,
+    TARGET_NAME,
+    down_command,
+    list_command,
+    up_command,
+)
 
 
 @click.group()
@@ -24,7 +29,9 @@ def cli():
     "--dry-run", is_flag=True, help="Simulate the command without making any changes."
 )
 def up(applications_dir, target_file, dry_run):
-    up_command(applications_dir=applications_dir, target_file=target_file, dry_run=dry_run)
+    up_command(
+        applications_dir=applications_dir, target_file=target_file, dry_run=dry_run
+    )
 
 
 @cli.command()
@@ -42,7 +49,9 @@ def up(applications_dir, target_file, dry_run):
     "--dry-run", is_flag=True, help="Simulate the command without making any changes."
 )
 def down(applications_dir, target_file, dry_run):
-    down_command(applications_dir=applications_dir, target_file=target_file, dry_run=dry_run)
+    down_command(
+        applications_dir=applications_dir, target_file=target_file, dry_run=dry_run
+    )
 
 
 @cli.command()
@@ -63,7 +72,9 @@ def down(applications_dir, target_file, dry_run):
     help="List the services running in each application.",
 )
 def list(applications_dir, target_file, services):
-    list_command(applications_dir=applications_dir, target_file=target_file, services=services)
+    list_command(
+        applications_dir=applications_dir, target_file=target_file, services=services
+    )
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ class MaestroConfig(BaseModel):
     hosts: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     application_name: str = ""
+    application_dir: str = ""
 
     @model_validator(mode="after")
     def check_hosts(self):

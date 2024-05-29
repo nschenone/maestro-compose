@@ -1,6 +1,6 @@
 hosts_include:
   # - $current
-  - $all
+  - "*"
 hosts_exclude: []
 tags_include: []
 # - server

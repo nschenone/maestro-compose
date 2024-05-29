@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pandas as pd
 import yaml
 from loguru import logger
 from pydantic import ValidationError
@@ -43,7 +44,11 @@ def load_config(app_dir: Path) -> MaestroConfig:
             maestro_labels = get_maestro_labels(compose_yaml=compose_yaml)
             if maestro_labels:
                 try:
-                    return MaestroConfig(**maestro_labels, application_name=app_dir.name)
+                    return MaestroConfig(
+                        **maestro_labels,
+                        application_name=app_dir.name,
+                        application_dir=str(app_dir),
+                    )
                 except ValidationError as e:
                     logger.error(f"Validation error in {app_dir}/{compose_file}: {e}")
                     return None
@@ -58,31 +63,48 @@ def get_applications(base_dir: Path, target: MaestroTarget):
     for app_dir in base_dir.iterdir():
         if app_dir.is_dir():
             config = load_config(app_dir)
-            # print(config)
+            if config:
+                apps.append(config.dict())
+    apps_df = pd.DataFrame(apps)
+    apps_df = filter_dataframe(
+        df=apps_df,
+        column_name="hosts",
+        include=target.hosts_include,
+        exclude=target.hosts_exclude,
+    )
+    apps_df = filter_dataframe(
+        df=apps_df,
+        column_name="tags",
+        include=target.tags_include,
+        exclude=target.tags_exclude,
+    )
+    if not apps_df.empty:
+        apps_df = apps_df.sort_values(
+            ["priority", "application_name"], ascending=[True, True]
+        )
+    return apps_df
 
-            # Maestro config exists and enabled
-            if config and config.enable:
-                # Check host match
 
-                if (
-                    not "$all" in target.hosts_include
-                    and (not any(host in config.hosts for host in target.hosts_include))
-                    or (any(host in config.hosts for host in target.hosts_exclude))
-                ):
-                    # print(config, target)
-                    continue
+def filter_dataframe(df, column_name, include, exclude):
+    if df.empty:
+        return df
 
-                # Check tags match
-                if (
-                    target.tags_include
-                    and (not any(tag in config.tags for tag in target.tags_include))
-                    or (any(tag in config.tags for tag in target.tags_exclude))
-                ):
-                    continue
+    def should_include(row):
+        # If include is empty or contains '*', include the row
+        if not include or "*" in include:
+            return True
+        # Include if any element in the row is in the include list
+        return any(item in include for item in row)
 
-                apps.append((app_dir, config))
-    apps.sort(key=lambda x: x[1].priority)
-    return apps
+    def should_exclude(row):
+        # Exclude if any element in the row is in the exclude list
+        return any(item in exclude for item in row)
+
+    # Apply the inclusion and exclusion filters
+    df_filtered = df[df[column_name].apply(should_include)]
+    df_filtered = df_filtered[~df_filtered[column_name].apply(should_exclude)]
+
+    return df_filtered
 
 
 def get_maestro_labels(compose_yaml: dict, maestro_key: str = "maestro."):
@@ -112,39 +134,44 @@ def execute_make(app_dir: Path, command: str):
 
 
 def up_command(applications_dir: str, target_file: str, dry_run: bool):
-    apps = get_applications(
+    apps_df = get_applications(
         base_dir=Path(applications_dir),
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
-    for app_dir, _ in apps:
-        logger.info(f"Starting {app_dir.name}".upper())
+    for _, row in apps_df.iterrows():
+        logger.info(f"Starting {row.application_name}".upper())
         if not dry_run:
-            execute_make(app_dir, "up")
+            execute_make(row.application_dir, "up")
 
 
 def down_command(applications_dir: str, target_file: str, dry_run: bool):
-    apps = get_applications(
+    apps_df = get_applications(
         base_dir=Path(applications_dir),
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
-    for app_dir, _ in reversed(apps):
-        logger.info(f"Stopping {app_dir.name}".upper())
+    apps_df = apps_df[::-1]
+    for _, row in apps_df.iterrows():
+        logger.info(f"Stopping {row.application_name}".upper())
         if not dry_run:
-            execute_make(app_dir, "down")
+            execute_make(row.application_dir, "down")
 
 
 def list_command(applications_dir: str, target_file: str, services: bool):
-    apps = get_applications(
+    apps_df = get_applications(
         base_dir=Path(applications_dir),
         target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
     )
-    for app_dir, app_config in apps:
-        logger.info(f"{app_dir.name}: - {app_config}")
+    for _, row in apps_df.iterrows():
+        logger.info(f"{row.application_name}: - {row.to_dict()}")
 
         if services:
             docker_command = ["docker", "compose", "ps", "--format", "json"]
             result = subprocess.run(
-                docker_command, cwd=app_dir, capture_output=True, text=True, check=True
+                docker_command,
+                cwd=row.application_dir,
+                capture_output=True,
+                text=True,
+                check=True,
             )
             if result.stdout.startswith("["):
                 containers = json.loads(result.stdout)
