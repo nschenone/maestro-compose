@@ -107,7 +107,12 @@ def get_applications(base_dir: Path, target: MaestroTarget, show_all: bool = Fal
 def get_containers_status():
     docker_command = ["docker", "ps", "--format", "json"]
     result = subprocess.run(docker_command, capture_output=True, text=True, check=True)
-    containers = [json.loads(r) for r in result.stdout.splitlines()]
+
+    if result.stdout.startswith("["):
+        containers = json.loads(result.stdout)
+    else:
+        containers = [json.loads(s) for s in result.stdout.splitlines()]
+
     all_labels = []
     for container in containers:
         formatted_labels = {}
@@ -126,7 +131,7 @@ def get_containers_status():
                 "status": format_color(container["State"], STATUS_COLOR_MAP),
             }
         )
-    return pd.DataFrame(all_labels)
+    return pd.DataFrame(all_labels, columns=["application", "container", "status"])
 
 
 def filter_dataframe(df, column_name, include, exclude):
