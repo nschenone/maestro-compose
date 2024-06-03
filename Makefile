@@ -23,13 +23,10 @@ all:
 .PHONY: install-requirements
 install-requirements: ## Install all requirements needed for development
 	poetry install
-
-.PHONY: package-wheel
-build: clean ## Build python package
-	poetry build
-
-publish: ## Publish python package
-	poetry publish
+	
+release: clean fmt ## Release python package to PyPi
+	poetry version patch
+	poetry publish --build
 
 .PHONY: clean
 clean: ## Delete all compiled Python files
