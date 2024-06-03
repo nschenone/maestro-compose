@@ -22,15 +22,15 @@ TARGET_DIR = "."
 APPLICATIONS_DIR = "applications"
 DOCKER_COMPOSE_FILES = ["docker-compose.yaml", "docker-compose.yml"]
 SHOW_STATUS_COLUMNS = [
-    "enable",
     "priority",
+    "enable",
     "status",
     "application",
     "container",
     "tags",
     "hosts",
 ]
-NO_STATUS_COLUMNS = ["enable", "priority", "application", "tags", "hosts"]
+NO_STATUS_COLUMNS = ["priority", "enable", "application", "tags", "hosts"]
 
 STATUS_COLOR_MAP = {
     "created": Fore.BLUE,
@@ -85,6 +85,7 @@ def get_applications(base_dir: Path, target: MaestroTarget, show_all: bool = Fal
                 apps.append(config.dict())
     apps_df = pd.DataFrame(apps)
     if not show_all:
+        apps_df = apps_df[apps_df["enable"]]
         apps_df = filter_dataframe(
             df=apps_df,
             column_name="hosts",
@@ -209,7 +210,6 @@ def list_command(
     applications_dir: str,
     target_file: str,
     show_status: bool,
-    show_target: bool,
     show_all: bool,
 ):
     columns = SHOW_STATUS_COLUMNS if show_status else NO_STATUS_COLUMNS
@@ -242,9 +242,8 @@ def list_command(
     merged = merged.sort_values(["priority", "application"], ascending=[True, True])
     formatted = merged.to_dict(orient="records")
 
-    if show_target:
-        print(Fore.BLUE + "TARGETS" + Style.RESET_ALL)
-        print(tabulate(target.dict(), headers="keys"))
-        print()
+    print(Fore.BLUE + "TARGETS" + Style.RESET_ALL)
+    print(tabulate(target.dict(), headers="keys"))
+    print()
     print(Fore.BLUE + "SERVICES" + Style.RESET_ALL)
     print(tabulate(formatted, headers="keys"))

@@ -61,34 +61,30 @@ def down(applications_dir, target_file, dry_run):
     help="Specify the path containing docker compose applications.",
 )
 @click.option(
+    "-f",
     "--target-file",
     default=TARGET_NAME,
     help="Specify the target YAML file to use for configuration.",
 )
 @click.option(
+    "-s",
     "--show-status",
     is_flag=True,
     default=False,
     help="List the services running in each application.",
 )
 @click.option(
-    "--show-target",
-    is_flag=True,
-    default=True,
-    help="List the target configuration in addition to results.",
-)
-@click.option(
+    "-a",
     "--show-all",
     is_flag=True,
     default=False,
     help="List all services regardless of host, tags, or enabled status.",
 )
-def list(applications_dir, target_file, show_status, show_target, show_all):
+def list(applications_dir, target_file, show_status, show_all):
     list_command(
         applications_dir=applications_dir,
         target_file=target_file,
         show_status=show_status,
-        show_target=show_target,
         show_all=show_all,
     )
 
