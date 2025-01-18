@@ -66,6 +66,7 @@ class CookiecutterAnsibleSharedConfig(BaseModel):
     server_name: str = ""
     cloudflare_config: str = ""
     cloudflare_ddns_container: str = ""
+    output_dir: str = ""
 
 
 class AnsibleConfig(BaseModel):

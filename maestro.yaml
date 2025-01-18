@@ -12,6 +12,7 @@ service:
     server_name: server
     cloudflare_config: /home/user/.../cloudflare_ddns/config.json
     cloudflare_ddns_container: cloudflare_ddns
+    output_dir: applications
   cookiecutter:
     source: https://github.com/nschenone/templates.git
     directory: maestro-service

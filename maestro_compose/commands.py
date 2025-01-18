@@ -267,7 +267,11 @@ def list_command(
 
 
 def new_command(
-    config_file: str, service_name: str, local_service: bool, public_service: bool
+    config_file: str,
+    service_name: str,
+    local_service: bool,
+    public_service: bool,
+    pyservice: bool,
 ):
     maestro_config = load_maestro_config(
         root_dir=Path(CONFIG_DIR), config_name=config_file
@@ -275,6 +279,7 @@ def new_command(
     maestro_config.service.config.service_name = service_name
     maestro_config.service.config.local = local_service
     maestro_config.service.config.public = public_service
+    maestro_config.service.config.pyservice = pyservice
 
     logger.info("Cloning template")
     cookiecutter(
@@ -282,6 +287,7 @@ def new_command(
         directory=maestro_config.service.cookiecutter.directory,
         no_input=True,
         extra_context=maestro_config.service.config.dict(),
+        output_dir=maestro_config.service.config.output_dir,
     )
 
     with open(maestro_config.service.ansible.playbook, "r") as f:

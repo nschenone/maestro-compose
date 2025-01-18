@@ -110,7 +110,13 @@ def list(applications_dir, config_file, show_status, show_all):
     default=False,
     help="Create service with public facing DNS entry",
 )
-def new(config_file, service_name, local_service, public_service):
+@click.option(
+    "--pyservice/--no-pyservice",
+    prompt="Is this a pyservice?",
+    default=True,
+    help="Create service made for Python applications",
+)
+def new(config_file, service_name, local_service, public_service, pyservice):
     """Create a new service using Docker Compose and Ansible."""
 
     click.echo(f"Creating service: {service_name}")
@@ -120,6 +126,7 @@ def new(config_file, service_name, local_service, public_service):
         service_name=service_name,
         public_service=public_service,
         local_service=local_service,
+        pyservice=pyservice,
     )
 
 
