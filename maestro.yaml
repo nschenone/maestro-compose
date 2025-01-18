@@ -1,11 +1,22 @@
-hosts_include:
-  # - $current
-  - "*"
-hosts_exclude: []
-tags_include: []
-# - server
-# - temp
-# - client
-# - compute_intensive
-tags_exclude: []
-#   - client
+hosts:
+  include:
+    - "*"
+  exclude: []
+tags:
+  include: []
+  exclude: []
+service:
+  config:
+    local_domain: local.domain.com
+    public_domain: domain.com
+    server_name: server
+    cloudflare_config: /home/user/.../cloudflare_ddns/config.json
+    cloudflare_ddns_container: cloudflare_ddns
+  cookiecutter:
+    source: https://github.com/nschenone/templates.git
+    directory: maestro-service
+  ansible:
+    playbook: playbook.yml
+    inventory: inventory.yml
+
+    

@@ -3,22 +3,24 @@ import subprocess
 import sys
 from pathlib import Path
 
+import ansible_runner
 import pandas as pd
 import yaml
 from colorama import Fore, Style
+from cookiecutter.main import cookiecutter
 from loguru import logger
 from pydantic import ValidationError
 from tabulate import tabulate
 
-from .models import MaestroConfig, MaestroTarget
+from .models import AppConfig, MaestroConfig
 
 logger_format = "<level>{message}</level>"
 logger.configure(extra={"ip": "", "user": ""})  # Default values
 logger.remove()
 logger.add(sys.stderr, format=logger_format)
 
-TARGET_NAME = "maestro.yaml"
-TARGET_DIR = "."
+CONFIG_NAME = "maestro.yaml"
+CONFIG_DIR = "."
 APPLICATIONS_DIR = "applications"
 DOCKER_COMPOSE_FILES = ["docker-compose.yaml", "docker-compose.yml"]
 SHOW_STATUS_COLUMNS = [
@@ -48,13 +50,15 @@ def format_color(state: str, color_map: dict):
     return color_map[state] + str(state) + Style.RESET_ALL
 
 
-def load_target(root_dir: Path, target_name: str = TARGET_NAME) -> MaestroTarget:
-    params_path = root_dir / target_name
+def load_maestro_config(
+    root_dir: Path, config_name: str = CONFIG_NAME
+) -> MaestroConfig:
+    params_path = root_dir / config_name
     params_yaml = yaml.safe_load(params_path.read_text())
-    return MaestroTarget(**params_yaml)
+    return MaestroConfig(**params_yaml)
 
 
-def load_config(app_dir: Path) -> MaestroConfig:
+def load_app_config(app_dir: Path) -> AppConfig:
     for compose_file in DOCKER_COMPOSE_FILES:
         try:
             config_path = app_dir / compose_file
@@ -62,7 +66,7 @@ def load_config(app_dir: Path) -> MaestroConfig:
             maestro_labels = get_maestro_labels(compose_yaml=compose_yaml)
             if maestro_labels:
                 try:
-                    return MaestroConfig(
+                    return AppConfig(
                         **maestro_labels,
                         application=app_dir.name,
                         application_dir=str(app_dir),
@@ -76,11 +80,13 @@ def load_config(app_dir: Path) -> MaestroConfig:
     return None
 
 
-def get_applications(base_dir: Path, target: MaestroTarget, show_all: bool = False):
+def get_applications(
+    base_dir: Path, maestro_config: MaestroConfig, show_all: bool = False
+):
     apps = []
     for app_dir in base_dir.iterdir():
         if app_dir.is_dir():
-            config = load_config(app_dir)
+            config = load_app_config(app_dir)
             if config:
                 apps.append(config.dict())
     apps_df = pd.DataFrame(apps)
@@ -89,14 +95,14 @@ def get_applications(base_dir: Path, target: MaestroTarget, show_all: bool = Fal
         apps_df = filter_dataframe(
             df=apps_df,
             column_name="hosts",
-            include=target.hosts_include,
-            exclude=target.hosts_exclude,
+            include=maestro_config.hosts.include,
+            exclude=maestro_config.hosts.exclude,
         )
         apps_df = filter_dataframe(
             df=apps_df,
             column_name="tags",
-            include=target.tags_include,
-            exclude=target.tags_exclude,
+            include=maestro_config.tags.include,
+            exclude=maestro_config.tags.exclude,
         )
     if not apps_df.empty:
         apps_df = apps_df.sort_values(
@@ -183,10 +189,12 @@ def execute_make(app_dir: Path, command: str):
     subprocess.run(["make", command], cwd=app_dir)
 
 
-def up_command(applications_dir: str, target_file: str, dry_run: bool):
+def up_command(applications_dir: str, config_file: str, dry_run: bool):
     apps_df = get_applications(
         base_dir=Path(applications_dir),
-        target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
+        maestro_config=load_maestro_config(
+            root_dir=Path(CONFIG_DIR), config_name=config_file
+        ),
     )
     for _, row in apps_df.iterrows():
         logger.info(Fore.BLUE + f"Starting {row.application}".upper() + Style.RESET_ALL)
@@ -194,10 +202,12 @@ def up_command(applications_dir: str, target_file: str, dry_run: bool):
             execute_make(row.application_dir, "up")
 
 
-def down_command(applications_dir: str, target_file: str, dry_run: bool):
+def down_command(applications_dir: str, config_file: str, dry_run: bool):
     apps_df = get_applications(
         base_dir=Path(applications_dir),
-        target=load_target(root_dir=Path(TARGET_DIR), target_name=target_file),
+        maestro_config=load_maestro_config(
+            root_dir=Path(CONFIG_DIR), config_name=config_file
+        ),
     )
     apps_df = apps_df[::-1]
     for _, row in apps_df.iterrows():
@@ -208,14 +218,18 @@ def down_command(applications_dir: str, target_file: str, dry_run: bool):
 
 def list_command(
     applications_dir: str,
-    target_file: str,
+    config_file: str,
     show_status: bool,
     show_all: bool,
 ):
     columns = SHOW_STATUS_COLUMNS if show_status else NO_STATUS_COLUMNS
-    target = load_target(root_dir=Path(TARGET_DIR), target_name=target_file)
+    maestro_config = load_maestro_config(
+        root_dir=Path(CONFIG_DIR), config_name=config_file
+    )
     apps_df = get_applications(
-        base_dir=Path(applications_dir), target=target, show_all=show_all
+        base_dir=Path(applications_dir),
+        maestro_config=maestro_config,
+        show_all=show_all,
     )
     merged = apps_df.copy()
     if show_status:
@@ -242,8 +256,43 @@ def list_command(
     merged = merged.sort_values(["priority", "application"], ascending=[True, True])
     formatted = merged.to_dict(orient="records")
 
-    print(Fore.BLUE + "TARGETS" + Style.RESET_ALL)
-    print(tabulate(target.dict(), headers="keys"))
-    print()
-    print(Fore.BLUE + "SERVICES" + Style.RESET_ALL)
-    print(tabulate(formatted, headers="keys"))
+    logger.info(Fore.BLUE + "HOSTS CONFIG" + Style.RESET_ALL)
+    logger.info(tabulate(maestro_config.hosts.dict(), headers="keys"))
+    logger.info("\n")
+    logger.info(Fore.BLUE + "TAGS CONFIG" + Style.RESET_ALL)
+    logger.info(tabulate(maestro_config.tags.dict(), headers="keys"))
+    logger.info("\n")
+    logger.info(Fore.BLUE + "SERVICES" + Style.RESET_ALL)
+    logger.info(tabulate(formatted, headers="keys"))
+
+
+def new_command(
+    config_file: str, service_name: str, local_service: bool, public_service: bool
+):
+    maestro_config = load_maestro_config(
+        root_dir=Path(CONFIG_DIR), config_name=config_file
+    )
+    maestro_config.service.config.service_name = service_name
+    maestro_config.service.config.local = local_service
+    maestro_config.service.config.public = public_service
+
+    logger.info("Cloning template")
+    cookiecutter(
+        template=maestro_config.service.cookiecutter.source,
+        directory=maestro_config.service.cookiecutter.directory,
+        no_input=True,
+        extra_context=maestro_config.service.config.dict(),
+    )
+
+    with open(maestro_config.service.ansible.playbook, "r") as f:
+        playbook = yaml.safe_load(f)
+
+    with open(maestro_config.service.ansible.inventory, "r") as f:
+        inventory = yaml.safe_load(f)
+
+    logger.info("Running ansible playbook")
+    ansible_runner.run(
+        playbook=playbook,
+        inventory=inventory,
+        extravars=maestro_config.service.config.dict(),
+    )

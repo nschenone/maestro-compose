@@ -1,1 +1,1 @@
-from .models import MaestroConfig, MaestroTarget  # noqa
+from .models import AppConfig, MaestroConfig  # noqa
