@@ -24,9 +24,9 @@ all:
 install-requirements: ## Install all requirements needed for development
 	poetry install
 	
-release: clean fmt ## Release python package to PyPi
-	$(MAKE) tag
+release: clean fmt tag ## Release python package to PyPi
 	poetry publish --build
+	gh release create $$version --title "$$version" --notes "Release $$version"
 	
 .PHONY: clean
 clean: ## Delete all compiled Python files
