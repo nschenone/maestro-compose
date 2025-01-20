@@ -25,9 +25,9 @@ install-requirements: ## Install all requirements needed for development
 	poetry install
 	
 release: clean fmt ## Release python package to PyPi
-	poetry version patch
+	$(MAKE) tag
 	poetry publish --build
-
+	
 .PHONY: clean
 clean: ## Delete all compiled Python files
 	find . -type f -name "*.py[co]" -delete
@@ -55,3 +55,25 @@ fmt-check: ## Format and check the code (using black and isort)
 flake8: ## Run flake8 lint
 	@echo "Running flake8 lint..."
 	flake8 $(SRC)
+
+.PHONY: bump
+bump: clean fmt ## Publish python package to PyPi with a patch version bump
+	@version_type=$(or $(VERSION),patch); \
+	echo "Bumping version: $$version_type"; \
+	poetry version $$version_type; \
+
+.PHONY: bump-minor
+bump-minor: ## Publish python package to PyPi with a minor version bump
+	$(MAKE) bump VERSION=minor
+
+.PHONY: bump-major
+bump-major: ## Publish python package to PyPi with a major version bump
+	$(MAKE) bump VERSION=major
+
+.PHONY: tag
+tag: ## Create and push a new tag based on the current poetry version
+	@version=$$(poetry version -s); \
+	echo "Creating tag: $$version"; \
+	git tag $$version; \
+	git push origin $$version; \
+	echo "Tag $$version created and pushed to origin"; \
