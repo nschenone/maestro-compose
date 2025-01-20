@@ -74,6 +74,8 @@ bump-major: ## Publish python package to PyPi with a major version bump
 tag: ## Create and push a new tag based on the current poetry version
 	@version=$$(poetry version -s); \
 	echo "Creating tag: $$version"; \
+	git add pyproject.toml; \
+	git commit -m "Bump version to $$version"; \
 	git tag $$version; \
 	git push origin $$version; \
-	echo "Tag $$version created and pushed to origin"; \
+	echo "Tag $$version created and pushed to origin";
