@@ -24,9 +24,17 @@ all:
 install-requirements: ## Install all requirements needed for development
 	poetry install
 	
-release: clean fmt tag ## Release python package to PyPi
-	poetry publish --build
+release: clean fmt ## Release python package to PyPi
+	@version=$$(poetry version -s); \
+	echo "Creating tag: $$version"; \
+	git add pyproject.toml; \
+	git commit -m "Bump version to $$version"; \
+	git tag $$version; \
+	git push origin $$version; \
+	echo "Tag $$version created and pushed to origin";
 	gh release create $$version --title "$$version" --notes "Release $$version"
+	echo "Releasing $$version con PyPi";
+	poetry publish --build
 	
 .PHONY: clean
 clean: ## Delete all compiled Python files
@@ -69,13 +77,3 @@ bump-minor: ## Publish python package to PyPi with a minor version bump
 .PHONY: bump-major
 bump-major: ## Publish python package to PyPi with a major version bump
 	$(MAKE) bump VERSION=major
-
-.PHONY: tag
-tag: ## Create and push a new tag based on the current poetry version
-	@version=$$(poetry version -s); \
-	echo "Creating tag: $$version"; \
-	git add pyproject.toml; \
-	git commit -m "Bump version to $$version"; \
-	git tag $$version; \
-	git push origin $$version; \
-	echo "Tag $$version created and pushed to origin";
