@@ -276,7 +276,7 @@ def new_command(
     maestro_config = load_maestro_config(
         root_dir=Path(CONFIG_DIR), config_name=config_file
     )
-    maestro_config.service.config.service_name = service_name
+    maestro_config.service.config.service_name = service_name.replace("_", "-")
     maestro_config.service.config.local = local_service
     maestro_config.service.config.public = public_service
     maestro_config.service.config.pyservice = pyservice
