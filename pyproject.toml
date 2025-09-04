@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "maestro-compose"
-version = "0.3.8"
+version = "0.3.9"
 description = "A simple command line tool for managing Docker Compose stacks using tags and other metadata."
 license = "MIT"
 authors = ["Nick Schenone <nschenone16@gmail.com>"]
